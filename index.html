@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Segitiga — BSC Triangular Arbitrage Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#0F1115;
+  --surface:#181B22;
+  --surface-2:#20242D;
+  --border:#2A2E38;
+  --gold:#F3BA2F;
+  --purple:#8B5CF6;
+  --profit:#3DD68C;
+  --loss:#F2545B;
+  --text:#EDEEF0;
+  --text-dim:#8B90A0;
+  --text-faint:#565B68;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:'Inter',sans-serif;
+  padding-bottom:40px;
+  min-height:100vh;
+}
+.mono{font-family:'JetBrains Mono',monospace;}
+.display{font-family:'Space Grotesk',sans-serif;}
+
+header{
+  position:sticky; top:0; z-index:20;
+  background:rgba(15,17,21,0.92); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+  padding:14px 16px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.brand{display:flex; align-items:center; gap:9px;}
+.brand-mark{
+  width:26px; height:26px;
+  background:linear-gradient(135deg, var(--gold), var(--purple));
+  clip-path:polygon(50% 6%, 94% 94%, 6% 94%);
+}
+.brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px; letter-spacing:0.2px;}
+.net-badge{
+  font-size:10px; padding:3px 8px; border-radius:20px;
+  background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border);
+  font-family:'JetBrains Mono',monospace;
+}
+.net-badge.ok{color:var(--profit); border-color:rgba(61,214,140,0.3);}
+
+#connectBtn{
+  background:var(--gold); color:#171205; border:none;
+  font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px;
+  padding:9px 16px; border-radius:10px; cursor:pointer;
+}
+#connectBtn:active{transform:scale(0.97);}
+.wallet-chip{
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface-2); border:1px solid var(--border);
+  padding:6px 12px; border-radius:10px; font-size:12px;
+}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--profit);}
+
+main{max-width:520px; margin:0 auto; padding:18px 16px;}
+
+.card{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:18px; margin-bottom:14px;
+}
+.card-label{
+  font-size:11px; text-transform:uppercase; letter-spacing:1.2px;
+  color:var(--text-faint); font-weight:600; margin-bottom:10px;
+}
+
+/* Signature: triangular route ring */
+.ring-wrap{display:flex; justify-content:center; padding:6px 0 2px;}
+.ring-wrap svg{width:100%; max-width:340px; height:auto;}
+.node-label{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; fill:var(--text);}
+.edge-amount{font-family:'JetBrains Mono',monospace; font-size:10px; fill:var(--text-dim);}
+.edge-line{stroke:var(--border); stroke-width:2; fill:none; transition:stroke 0.4s;}
+.edge-line.hot{stroke:var(--gold);}
+.node-circle{fill:var(--surface-2); stroke:var(--border); stroke-width:1.5;}
+
+.signal-row{display:flex; align-items:baseline; justify-content:space-between; margin-top:8px;}
+.signal-pct{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:34px;}
+.signal-pct.profit{color:var(--profit);}
+.signal-pct.loss{color:var(--loss);}
+.status-badge{
+  font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;
+  letter-spacing:0.4px;
+}
+.status-badge.profit{background:rgba(61,214,140,0.12); color:var(--profit);}
+.status-badge.loss{background:rgba(242,84,91,0.12); color:var(--loss);}
+.meta-line{font-size:11px; color:var(--text-faint); margin-top:10px; font-family:'JetBrains Mono',monospace;}
+
+.settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.field{display:flex; flex-direction:column; gap:5px;}
+.field label{font-size:11px; color:var(--text-dim);}
+.field input{
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+  padding:9px 10px; border-radius:8px; font-family:'JetBrains Mono',monospace; font-size:13px;
+  width:100%;
+}
+.field input:focus{outline:none; border-color:var(--gold);}
+
+.toggle-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 0;
+}
+.toggle-row + .toggle-row{border-top:1px solid var(--border);}
+.toggle-title{font-size:13px; font-weight:600;}
+.toggle-sub{font-size:11px; color:var(--text-faint); margin-top:2px;}
+.switch{position:relative; width:42px; height:24px; flex-shrink:0;}
+.switch input{opacity:0; width:0; height:0;}
+.slider{
+  position:absolute; inset:0; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:24px; cursor:pointer; transition:0.2s;
+}
+.slider:before{
+  content:""; position:absolute; width:16px; height:16px; left:3px; top:3px;
+  background:var(--text-dim); border-radius:50%; transition:0.2s;
+}
+input:checked + .slider{background:rgba(243,186,47,0.25); border-color:var(--gold);}
+input:checked + .slider:before{transform:translateX(18px); background:var(--gold);}
+.switch.danger input:checked + .slider{background:rgba(139,92,246,0.25); border-color:var(--purple);}
+.switch.danger input:checked + .slider:before{background:var(--purple);}
+
+.sim-banner{
+  display:flex; align-items:center; gap:8px;
+  background:rgba(243,186,47,0.08); border:1px solid rgba(243,186,47,0.25);
+  color:var(--gold); font-size:12px; font-weight:600;
+  padding:9px 12px; border-radius:10px; margin-bottom:14px;
+}
+
+.step{
+  display:flex; align-items:center; gap:12px;
+  padding:12px; border-radius:12px; background:var(--surface-2);
+  border:1px solid var(--border); margin-bottom:8px;
+  opacity:0.5;
+}
+.step.active{opacity:1; border-color:var(--gold);}
+.step.done{opacity:0.6;}
+.step-num{
+  width:24px; height:24px; border-radius:50%; background:var(--bg);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700;
+  flex-shrink:0; border:1px solid var(--border);
+}
+.step.active .step-num{border-color:var(--gold); color:var(--gold);}
+.step.done .step-num{background:var(--profit); color:#0a2a1a; border-color:var(--profit);}
+.step-body{flex:1; min-width:0;}
+.step-title{font-size:13px; font-weight:600;}
+.step-sub{font-size:11px; color:var(--text-faint); margin-top:1px;}
+.step-btn{
+  background:var(--surface); border:1px solid var(--border); color:var(--text);
+  font-size:12px; font-weight:600; padding:7px 12px; border-radius:8px;
+  cursor:pointer; flex-shrink:0; font-family:'Inter',sans-serif;
+}
+.step.active .step-btn{background:var(--gold); color:#171205; border-color:var(--gold);}
+.step-btn:disabled{opacity:0.4; cursor:not-allowed;}
+
+.execute-cta{
+  width:100%; padding:15px; border-radius:12px; border:none;
+  font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;
+  background:var(--border); color:var(--text-faint); cursor:not-allowed;
+  margin-top:6px;
+}
+.execute-cta.ready{background:linear-gradient(135deg, var(--gold), #ffd76a); color:#171205; cursor:pointer;}
+
+.log-item{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:9px 0; border-bottom:1px solid var(--border); font-size:12px;
+}
+.log-item:last-child{border-bottom:none;}
+.log-time{color:var(--text-faint); font-family:'JetBrains Mono',monospace; font-size:10px;}
+.log-empty{color:var(--text-faint); font-size:12px; text-align:center; padding:14px 0;}
+
+.disclaimer{
+  font-size:11px; color:var(--text-faint); line-height:1.6; padding:0 4px;
+  margin-top:6px;
+}
+a{color:var(--gold);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div class="brand-name">Segitiga</div>
+    <span class="net-badge" id="netBadge">BSC · belum konek</span>
+  </div>
+  <button id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
+</header>
+
+<main>
+
+  <div class="sim-banner" id="simBanner">
+    ⚠️ MODE SIMULASI AKTIF — tidak ada transaksi asli yang dikirim
+  </div>
+
+  <!-- Signature: triangular ring -->
+  <div class="card">
+    <div class="card-label">Rute Arbitrage — PancakeSwap V2</div>
+    <div class="ring-wrap">
+      <svg viewBox="0 0 320 280">
+        <!-- edges -->
+        <path id="edgeAB" class="edge-line" d="M160,36 L280,210"></path>
+        <path id="edgeBC" class="edge-line" d="M280,210 L40,210"></path>
+        <path id="edgeCA" class="edge-line" d="M40,210 L160,36"></path>
+        <!-- nodes -->
+        <circle class="node-circle" cx="160" cy="36" r="30"></circle>
+        <text x="160" y="41" text-anchor="middle" class="node-label">WBNB</text>
+        <circle class="node-circle" cx="280" cy="210" r="30"></circle>
+        <text x="280" y="215" text-anchor="middle" class="node-label">BUSD</text>
+        <circle class="node-circle" cx="40" cy="210" r="30"></circle>
+        <text x="40" y="215" text-anchor="middle" class="node-label">CAKE</text>
+        <!-- edge amounts -->
+        <text id="labAB" x="235" y="115" text-anchor="middle" class="edge-amount">–</text>
+        <text id="labBC" x="160" y="228" text-anchor="middle" class="edge-amount">–</text>
+        <text id="labCA" x="85" y="115" text-anchor="middle" class="edge-amount">–</text>
+      </svg>
+    </div>
+
+    <div class="signal-row">
+      <div>
+        <div class="signal-pct mono" id="profitPct">–</div>
+        <div class="meta-line" id="lastScan">belum pernah scan</div>
+      </div>
+      <div class="status-badge" id="statusBadge">MENUNGGU</div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <div class="card-label">Pengaturan</div>
+    <div class="settings-grid">
+      <div class="field">
+        <label>Ukuran Trade (BNB)</label>
+        <input type="number" id="tradeSize" value="0.1" step="0.01" min="0.001">
+      </div>
+      <div class="field">
+        <label>Slippage (%)</label>
+        <input type="number" id="slippage" value="0.5" step="0.1" min="0.1">
+      </div>
+      <div class="field">
+        <label>Min. Profit Sinyal (%)</label>
+        <input type="number" id="minProfit" value="0.3" step="0.05" min="0">
+      </div>
+      <div class="field">
+        <label>Batas Rugi Harian (BNB)</label>
+        <input type="number" id="lossCap" value="0.05" step="0.01" min="0">
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-title">Auto-scan tiap 15 detik</div>
+        <div class="toggle-sub">Baca harga on-chain, gratis (tanpa gas)</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="autoScan" checked onchange="toggleAutoScan()"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-title">Mode Simulasi</div>
+        <div class="toggle-sub">Matikan hanya jika siap kirim transaksi asli</div>
+      </div>
+      <label class="switch danger"><input type="checkbox" id="simMode" checked onchange="toggleSimMode()"><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <!-- Execute panel -->
+  <div class="card">
+    <div class="card-label">Eksekusi (3 tap, wallet Bang Ali tetap pegang kendali)</div>
+
+    <div class="step" id="step1">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Wrap BNB → WBNB</div>
+        <div class="step-sub" id="step1sub">Cek saldo WBNB dulu</div>
+      </div>
+      <button class="step-btn" onclick="wrapBNB()" id="step1btn" disabled>Wrap</button>
+    </div>
+
+    <div class="step" id="step2">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Approve Router</div>
+        <div class="step-sub" id="step2sub">Izinkan PancakeSwap pakai WBNB</div>
+      </div>
+      <button class="step-btn" onclick="approveRouter()" id="step2btn" disabled>Approve</button>
+    </div>
+
+    <div class="step" id="step3">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Jalankan Swap Triangular</div>
+        <div class="step-sub" id="step3sub">WBNB → BUSD → CAKE → WBNB, 1 transaksi</div>
+      </div>
+      <button class="step-btn" onclick="executeSwap()" id="step3btn" disabled>Swap</button>
+    </div>
+
+    <button class="execute-cta" id="killSwitchInfo" disabled>Connect wallet dulu buat mulai</button>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div class="card-label">Riwayat Aktivitas</div>
+    <div id="logList"><div class="log-empty">Belum ada aktivitas</div></div>
+  </div>
+
+  <div class="disclaimer">
+    Dashboard ini scan harga on-chain PancakeSwap secara langsung dari wallet browser — tidak ada server, tidak ada custody dana. Dana selalu ada di wallet Bang Ali sendiri, setiap transaksi butuh konfirmasi manual. Angka profit belum termasuk gas & kompetisi MEV — anggap sebagai estimasi, bukan jaminan. Bukan nasihat keuangan.
+  </div>
+
+</main>
+
+<script>
+// ---------- Constants ----------
+const RPC_FALLBACK = "https://bsc-dataseed.binance.org/";
+const ROUTER_ADDR = "0x10ED43C718714eb63d5aA57B78B54704E256024";
+const WBNB_ADDR   = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095";
+const BUSD_ADDR   = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
+const CAKE_ADDR   = "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82";
+const BSC_CHAIN_HEX = "0x38";
+
+const ROUTER_ABI = [
+  "function getAmountsOut(uint amountIn, address[] path) view returns (uint[] amounts)",
+  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)"
+];
+const WBNB_ABI = [
+  "function deposit() payable",
+  "function withdraw(uint amount)",
+  "function approve(address spender, uint amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint)",
+  "function balanceOf(address) view returns (uint)"
+];
+
+const GAS_ESTIMATE_BNB = 0.0015; // rough estimate for 1 swap tx across 3 hops
+
+const RPC_LIST = [
+  "https://bsc.publicnode.com",
+  "https://rpc.ankr.com/bsc",
+  "https://bsc-dataseed1.defibit.io/",
+  "https://bsc-dataseed1.ninicoin.io/",
+  "https://bsc-dataseed.binance.org/"
+];
+
+// ---------- State ----------
+let signer = null, userAddress = null, walletProvider = null;
+let scanTimer = null;
+let lastQuote = null; // {amountIn, finalOut, profitPct, netProfitBnb}
+let simMode = true;
+let dailyLoss = Number(localStorage.getItem('segitiga_dailyLoss_' + todayKey()) || 0);
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+// ---------- Wallet connect ----------
+async function connectWallet(){
+  if (!window.ethereum){
+    alert("Nggak ketemu wallet. Buka halaman ini dari dalam app Trust Wallet / MetaMask (pakai browser bawaan mereka) ya, Bang.");
+    return;
+  }
+  try{
+    walletProvider = new ethers.providers.Web3Provider(window.ethereum);
+    await walletProvider.send("eth_requestAccounts", []);
+    signer = walletProvider.getSigner();
+    userAddress = await signer.getAddress();
+
+    const network = await walletProvider.getNetwork();
+    if (network.chainId !== 56){
+      try{
+        await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId: BSC_CHAIN_HEX}] });
+      }catch(switchErr){
+        if (switchErr.code === 4902){
+          await window.ethereum.request({
+            method:'wallet_addEthereumChain',
+            params:[{
+              chainId: BSC_CHAIN_HEX,
+              chainName: 'BNB Smart Chain',
+              nativeCurrency:{name:'BNB', symbol:'BNB', decimals:18},
+              rpcUrls:[RPC_FALLBACK],
+              blockExplorerUrls:['https://bscscan.com']
+            }]
+          });
+        }
+      }
+    }
+
+    document.getElementById('connectBtn').outerHTML =
+      `<div class="wallet-chip"><span class="dot"></span><span class="mono">${userAddress.slice(0,6)}...${userAddress.slice(-4)}</span></div>`;
+    document.getElementById('netBadge').textContent = "BSC · terkoneksi";
+    document.getElementById('netBadge').classList.add('ok');
+    document.getElementById('killSwitchInfo').textContent = "Tunggu sinyal profit muncul...";
+
+    window.ethereum.on('accountsChanged', () => location.reload());
+    window.ethereum.on('chainChanged', () => location.reload());
+
+    await refreshStepStates();
+    scanNow();
+  }catch(e){
+    console.error(e);
+    alert("Gagal connect: " + (e.message || e));
+  }
+}
+
+// ---------- Scanning (read-only, free) ----------
+async function getAmountsOutWithFallback(amountIn, path){
+  // 1) prefer the connected wallet's own RPC — most reliable, no CORS issues
+  if (walletProvider){
+    try{
+      const router = new ethers.Contract(ROUTER_ADDR, ROUTER_ABI, walletProvider);
+      return await router.getAmountsOut(amountIn, path);
+    }catch(e){ console.warn("wallet RPC read failed, trying public RPCs", e.message); }
+  }
+  // 2) fall back through a list of public RPCs
+  let lastErr = null;
+  for (const url of RPC_LIST){
+    try{
+      const provider = new ethers.providers.JsonRpcProvider(url);
+      const router = new ethers.Contract(ROUTER_ADDR, ROUTER_ABI, provider);
+      const amounts = await Promise.race([
+        router.getAmountsOut(amountIn, path),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout: " + url)), 7000))
+      ]);
+      return amounts;
+    }catch(e){ lastErr = e; continue; }
+  }
+  throw lastErr || new Error("Semua RPC gagal diakses");
+}
+
+async function scanNow(){
+  try{
+    const size = parseFloat(document.getElementById('tradeSize').value || "0.1");
+    const amountIn = ethers.utils.parseEther(size.toString());
+    const path = [WBNB_ADDR, BUSD_ADDR, CAKE_ADDR, WBNB_ADDR];
+
+    const amounts = await getAmountsOutWithFallback(amountIn, path);
+    const busdOut = amounts[1], cakeOut = amounts[2], finalOut = amounts[3];
+
+    const amountInNum = parseFloat(ethers.utils.formatEther(amountIn));
+    const finalOutNum = parseFloat(ethers.utils.formatEther(finalOut));
+    const grossProfitBnb = finalOutNum - amountInNum;
+    const netProfitBnb = grossProfitBnb - GAS_ESTIMATE_BNB;
+    const profitPct = (grossProfitBnb / amountInNum) * 100;
+    const netProfitPct = (netProfitBnb / amountInNum) * 100;
+
+    lastQuote = {amountIn, finalOut, amountInNum, finalOutNum, profitPct, netProfitPct, netProfitBnb};
+
+    // update ring labels
+    document.getElementById('labAB').textContent = fmt(ethers.utils.formatEther(busdOut)) + " BUSD";
+    document.getElementById('labBC').textContent = fmt(ethers.utils.formatEther(cakeOut)) + " CAKE";
+    document.getElementById('labCA').textContent = fmt(finalOutNum) + " WBNB";
+
+    const minProfit = parseFloat(document.getElementById('minProfit').value || "0.3");
+    const isHot = netProfitPct >= minProfit;
+
+    document.getElementById('edgeAB').classList.toggle('hot', isHot);
+    document.getElementById('edgeBC').classList.toggle('hot', isHot);
+    document.getElementById('edgeCA').classList.toggle('hot', isHot);
+
+    const pctEl = document.getElementById('profitPct');
+    pctEl.textContent = (netProfitPct >= 0 ? "+" : "") + netProfitPct.toFixed(3) + "%";
+    pctEl.className = "signal-pct mono " + (netProfitPct >= 0 ? "profit" : "loss");
+
+    const badge = document.getElementById('statusBadge');
+    if (isHot){
+      badge.textContent = "PROFITABLE";
+      badge.className = "status-badge profit";
+    } else {
+      badge.textContent = "BELUM PROFIT";
+      badge.className = "status-badge loss";
+    }
+
+    document.getElementById('lastScan').textContent =
+      "scan " + new Date().toLocaleTimeString('id-ID') + " · net setelah estimasi gas " + GAS_ESTIMATE_BNB + " BNB";
+
+    if (isHot) addLog("Peluang ditemukan: " + netProfitPct.toFixed(3) + "% net", "signal");
+
+    await refreshStepStates();
+  }catch(e){
+    console.error("scan error", e);
+    const raw = (e && (e.reason || e.message)) ? (e.reason || e.message) : String(e);
+    document.getElementById('lastScan').textContent = "scan gagal: " + raw.slice(0,90);
+  }
+}
+
+function fmt(v){ const n = parseFloat(v); return n < 0.01 ? n.toFixed(6) : n.toFixed(3); }
+
+function toggleAutoScan(){
+  const on = document.getElementById('autoScan').checked;
+  if (scanTimer) clearInterval(scanTimer);
+  if (on) scanTimer = setInterval(scanNow, 15000);
+}
+function toggleSimMode(){
+  simMode = document.getElementById('simMode').checked;
+  document.getElementById('simBanner').style.display = simMode ? "flex" : "none";
+  refreshStepStates();
+}
+
+// ---------- Execute flow ----------
+async function refreshStepStates(){
+  const s1 = document.getElementById('step1'), s1btn = document.getElementById('step1btn'), s1sub = document.getElementById('step1sub');
+  const s2 = document.getElementById('step2'), s2btn = document.getElementById('step2btn'), s2sub = document.getElementById('step2sub');
+  const s3 = document.getElementById('step3'), s3btn = document.getElementById('step3btn'), s3sub = document.getElementById('step3sub');
+  const cta = document.getElementById('killSwitchInfo');
+
+  if (!signer){
+    [s1btn,s2btn,s3btn].forEach(b=>b.disabled = true);
+    cta.textContent = "Connect wallet dulu buat mulai";
+    cta.className = "execute-cta";
+    return;
+  }
+
+  const size = parseFloat(document.getElementById('tradeSize').value || "0.1");
+  const wbnb = new ethers.Contract(WBNB_ADDR, WBNB_ABI, walletProvider);
+  const needed = ethers.utils.parseEther(size.toString());
+
+  const bal = await wbnb.balanceOf(userAddress);
+  const allowance = await wbnb.allowance(userAddress, ROUTER_ADDR);
+
+  const hasEnoughWbnb = bal.gte(needed);
+  const hasApproval = allowance.gte(needed);
+
+  // Step 1: wrap
+  s1.classList.toggle('done', hasEnoughWbnb);
+  s1.classList.toggle('active', !hasEnoughWbnb);
+  s1btn.disabled = hasEnoughWbnb;
+  s1sub.textContent = hasEnoughWbnb ? "Saldo WBNB cukup ✓" : `Butuh ${size} WBNB, sekarang punya ${fmt(ethers.utils.formatEther(bal))}`;
+
+  // Step 2: approve
+  s2.classList.toggle('done', hasApproval);
+  s2.classList.toggle('active', hasEnoughWbnb && !hasApproval);
+  s2btn.disabled = !hasEnoughWbnb || hasApproval;
+  s2sub.textContent = hasApproval ? "Router sudah diizinkan ✓" : "Izinkan router pakai WBNB Bang Ali";
+
+  // Step 3: swap — only ready if profitable, under sim off, under loss cap, wrap+approve done
+  const lossCap = parseFloat(document.getElementById('lossCap').value || "0.05");
+  const overLossCap = dailyLoss >= lossCap;
+  const minProfit = parseFloat(document.getElementById('minProfit').value || "0.3");
+  const isProfitable = lastQuote && lastQuote.netProfitPct >= minProfit;
+  const readyToSwap = hasEnoughWbnb && hasApproval && isProfitable && !simMode && !overLossCap;
+
+  s3.classList.toggle('active', hasEnoughWbnb && hasApproval);
+  s3btn.disabled = !readyToSwap;
+  if (overLossCap){
+    s3sub.textContent = "⛔ Batas rugi harian tercapai — kill switch aktif";
+  } else if (simMode){
+    s3sub.textContent = "Mode simulasi aktif, matikan dulu buat eksekusi asli";
+  } else if (!isProfitable){
+    s3sub.textContent = "Belum ada sinyal profit di atas ambang batas";
+  } else {
+    s3sub.textContent = "Siap eksekusi — 1 transaksi WBNB→BUSD→CAKE→WBNB";
+  }
+
+  if (overLossCap){
+    cta.textContent = "🛑 Kill switch aktif — batas rugi harian tercapai";
+    cta.className = "execute-cta";
+  } else if (readyToSwap){
+    cta.textContent = "Semua step siap — tap Swap di atas";
+    cta.className = "execute-cta ready";
+  } else {
+    cta.textContent = simMode ? "Simulasi jalan — matikan utk transaksi asli" : "Ikuti step 1-3 di atas";
+    cta.className = "execute-cta";
+  }
+}
+
+async function wrapBNB(){
+  try{
+    const size = document.getElementById('tradeSize').value;
+    const wbnb = new ethers.Contract(WBNB_ADDR, WBNB_ABI, signer);
+    if (simMode){ addLog(`[SIMULASI] Wrap ${size} BNB → WBNB`, "sim"); return refreshStepStates(); }
+    const tx = await wbnb.deposit({ value: ethers.utils.parseEther(size) });
+    addLog(`Wrap ${size} BNB dikirim... ${tx.hash.slice(0,10)}`, "tx");
+    await tx.wait();
+    addLog(`Wrap ${size} BNB selesai ✓`, "tx");
+    refreshStepStates();
+  }catch(e){ handleTxError(e); }
+}
+
+async function approveRouter(){
+  try{
+    const wbnb = new ethers.Contract(WBNB_ADDR, WBNB_ABI, signer);
+    if (simMode){ addLog("[SIMULASI] Approve router", "sim"); return refreshStepStates(); }
+    const tx = await wbnb.approve(ROUTER_ADDR, ethers.constants.MaxUint256);
+    addLog(`Approve dikirim... ${tx.hash.slice(0,10)}`, "tx");
+    await tx.wait();
+    addLog("Approve selesai ✓", "tx");
+    refreshStepStates();
+  }catch(e){ handleTxError(e); }
+}
+
+async function executeSwap(){
+  try{
+    if (!lastQuote){ alert("Belum ada data sinyal, tunggu scan berikutnya."); return; }
+    const slippage = parseFloat(document.getElementById('slippage').value || "0.5");
+    const amountOutMin = lastQuote.finalOut.mul(Math.round((100-slippage)*100)).div(10000);
+    const router = new ethers.Contract(ROUTER_ADDR, ROUTER_ABI, signer);
+    const deadline = Math.floor(Date.now()/1000) + 300;
+    const path = [WBNB_ADDR, BUSD_ADDR, CAKE_ADDR, WBNB_ADDR];
+
+    if (simMode){
+      addLog(`[SIMULASI] Swap ${document.getElementById('tradeSize').value} WBNB, est. profit ${lastQuote.netProfitPct.toFixed(3)}%`, "sim");
+      return refreshStepStates();
+    }
+
+    const tx = await router.swapExactTokensForTokens(lastQuote.amountIn, amountOutMin, path, userAddress, deadline);
+    addLog(`Swap dikirim... ${tx.hash.slice(0,10)}`, "tx");
+    const receipt = await tx.wait();
+    addLog(`Swap selesai ✓ tx ${receipt.transactionHash.slice(0,10)}`, "tx");
+
+    // recompute realized result vs prediction to update loss cap tracker
+    await scanNow();
+    refreshStepStates();
+  }catch(e){ handleTxError(e); }
+}
+
+function handleTxError(e){
+  console.error(e);
+  addLog("Transaksi gagal/dibatalkan: " + (e.reason || e.message || "unknown").slice(0,60), "error");
+  if (e.message && e.message.toLowerCase().includes("insufficient")){
+    dailyLoss += 0; // no realized loss on a failed/reverted tx
+  }
+  refreshStepStates();
+}
+
+// ---------- Log ----------
+function addLog(text, type){
+  const el = document.getElementById('logList');
+  if (el.querySelector('.log-empty')) el.innerHTML = "";
+  const row = document.createElement('div');
+  row.className = "log-item";
+  const color = type === "error" ? "var(--loss)" : type === "signal" ? "var(--gold)" : type === "sim" ? "var(--purple)" : "var(--profit)";
+  row.innerHTML = `<span>${text}</span><span class="log-time">${new Date().toLocaleTimeString('id-ID')}</span>`;
+  row.style.borderLeft = "2px solid " + color;
+  row.style.paddingLeft = "8px";
+  el.prepend(row);
+  const items = el.querySelectorAll('.log-item');
+  if (items.length > 25) items[items.length-1].remove();
+}
+
+// ---------- Init ----------
+scanNow();
+toggleAutoScan();
+</script>
+</body>
+</html>
